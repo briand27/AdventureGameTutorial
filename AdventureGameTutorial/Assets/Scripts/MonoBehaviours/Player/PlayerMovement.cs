@@ -16,11 +16,15 @@ public class PlayerMovement : MonoBehaviour {
 
     private WaitForSeconds inputHoldWait;
     private Vector3 destinationPosition;
+    private Interactable currentInteractable;
+    private bool handleInput = true;
 
     private const float stopDistanceProportion = 0.1f;
     private const float navMeshSampleDistance = 4f;
 
     private readonly int hashSpeedParam = Animator.StringToHash("Speed");
+    private readonly int hashLocomotionTag = 
+        Animator.StringToHash("Locomotion");
 
     private void Start()
     {
@@ -66,6 +70,15 @@ public class PlayerMovement : MonoBehaviour {
         agent.isStopped = true; // new version
         transform.position = destinationPosition;
         speed = 0f;
+
+        if (currentInteractable)
+        {
+            transform.rotation = 
+                currentInteractable.interactionLocation.rotation;
+            currentInteractable.Interact();
+            currentInteractable = null;
+            StartCoroutine(WaitForInteraction());
+        }
     }
 
     private void Slowing(out float speed, float distanceToDestination)
@@ -80,6 +93,14 @@ public class PlayerMovement : MonoBehaviour {
             distanceToDestination / agent.stoppingDistance;
 
         speed = Mathf.Lerp(slowingSpeed, 0f, proportionalDistance);
+
+        Quaternion targetRotation = currentInteractable ?
+            currentInteractable.interactionLocation.rotation : 
+            transform.rotation;
+        transform.rotation = Quaternion.Lerp(
+            transform.rotation, targetRotation, proportionalDistance);
+
+
     }
 
     private void Moving()
@@ -93,6 +114,10 @@ public class PlayerMovement : MonoBehaviour {
 
     public void OnGroundClick(BaseEventData data)
     {
+        if (!handleInput) return;
+
+        currentInteractable = null;
+
         PointerEventData pData = (PointerEventData) data;
         NavMeshHit hit;
         if (NavMesh.SamplePosition(
@@ -110,6 +135,33 @@ public class PlayerMovement : MonoBehaviour {
         agent.SetDestination(destinationPosition);
         // agent.Resume(); // old way
         agent.isStopped = false; // new way
+    }
+
+    public void OnInteractableClick(Interactable interactable)
+    {
+        if (!handleInput) return;
+
+        currentInteractable = interactable;
+        destinationPosition = currentInteractable.interactionLocation.position;
+
+        agent.SetDestination(destinationPosition);
+        // agent.Resume(); // old way
+        agent.isStopped = false; // new way
+    }
+
+    private IEnumerator WaitForInteraction()
+    {
+        handleInput = false;
+
+        yield return inputHoldWait;
+
+        while (animator.GetCurrentAnimatorStateInfo(0).tagHash != 
+               hashLocomotionTag)
+        {
+            yield return null;
+        }
+
+        handleInput = true;
     }
 
 }
